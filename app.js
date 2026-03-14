@@ -511,14 +511,14 @@ const App = {
     const recentContainer = document.getElementById('recentHistory');
 
     if (this.history.length === 0) {
-      container.innerHTML = `
+      if (container) container.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon">📁</div>
           <h3>Chưa có lịch sử kiểm tra</h3>
           <p>Các hồ sơ đã kiểm tra sẽ được lưu tại đây</p>
         </div>
       `;
-      recentContainer.innerHTML = `
+      if (recentContainer) recentContainer.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon">📋</div>
           <h3>Chưa có dữ liệu</h3>
@@ -529,10 +529,10 @@ const App = {
     }
 
     const tableHTML = this.buildHistoryTable(this.history);
-    container.innerHTML = tableHTML;
+    if (container) container.innerHTML = tableHTML;
 
     const recentTableHTML = this.buildHistoryTable(this.history.slice(0, 5));
-    recentContainer.innerHTML = recentTableHTML;
+    if (recentContainer) recentContainer.innerHTML = recentTableHTML;
   },
 
   buildHistoryTable(data) {
