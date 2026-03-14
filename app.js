@@ -14,18 +14,18 @@ const App = {
 
   // ========== INITIALIZATION ==========
   init() {
-    this.engine = new BHYTRulesEngine();
-    this.loadHistory();
-    this.initTabs();
-    this.initForm();
-    this.initDropdowns();
-    this.initRegulations();
-    this.initCharts();
-    this.initRealStats();
-    this.updateDashboard();
+    try { this.engine = new BHYTRulesEngine(); } catch(e) { console.error('init engine:', e); }
+    try { this.loadHistory(); } catch(e) { console.error('init loadHistory:', e); }
+    try { this.initTabs(); } catch(e) { console.error('init tabs:', e); }
+    try { this.initForm(); } catch(e) { console.error('init form:', e); }
+    try { this.initDropdowns(); } catch(e) { console.error('init dropdowns:', e); }
+    try { this.initRegulations(); } catch(e) { console.error('init regulations:', e); }
+    try { this.initCharts(); } catch(e) { console.error('init charts:', e); }
+    try { this.initRealStats(); } catch(e) { console.error('init realStats:', e); }
+    try { this.updateDashboard(); } catch(e) { console.error('init dashboard:', e); }
 
     // Set default visit date to today
-    document.getElementById('visitDate').valueAsDate = new Date();
+    try { document.getElementById('visitDate').valueAsDate = new Date(); } catch(e) {}
   },
 
   // ========== TAB NAVIGATION ==========
