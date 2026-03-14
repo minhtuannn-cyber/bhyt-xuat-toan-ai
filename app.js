@@ -1425,11 +1425,12 @@ const App = {
     const cols = Object.keys(jsonData[0]);
     const colsLower = cols.map(c => c.toLowerCase());
     const isDvkt = colsLower.some(c => c.includes('ho_ten') || c.includes('ma_bn') || c.includes('ma_benh'));
-    const isSummary = colsLower.some(c => c.includes('chuyen_de') || c.includes('chuyên đề'));
 
-    let html = '';
     if (isDvkt) {
-      // Process dvkt02-style file
+      // Store imported data for record browsing
+      this.importedRecords = jsonData;
+      this.importedFileName = fileName;
+
       const totalRows = jsonData.length;
       const patients = new Set();
       const violations = {};
@@ -1442,7 +1443,6 @@ const App = {
         const dept = row.MA_KHOA || row.ma_khoa || '';
         const amount = parseFloat(row.tien_de_nghi_kt || row.THANH_TIEN || 0);
         const violation = row.ten_chuyen_de || row.TEN_CHUYEN_DE || '';
-        const reason = row.LY_DO_TC || row.ly_do_tc || '';
 
         if (name) patients.add(ma || name);
         if (dept) departments[dept] = (departments[dept] || 0) + 1;
@@ -1453,7 +1453,7 @@ const App = {
       const sortedViolations = Object.entries(violations).sort((a, b) => b[1] - a[1]).slice(0, 10);
       const sortedDepts = Object.entries(departments).sort((a, b) => b[1] - a[1]);
 
-      html = `
+      let html = `
         <div style="margin-bottom:16px; padding:16px; background:rgba(48,209,88,0.1); border:1px solid rgba(48,209,88,0.3); border-radius:12px;">
           <h4 style="color:#30d158; margin-bottom:8px;">✅ Phân tích thành công: ${fileName}</h4>
           <p style="color:var(--text-secondary); font-size:0.85rem;">Sheet: ${sheetName} · ${totalRows} bản ghi</p>
@@ -1489,10 +1489,17 @@ const App = {
             <span style="color:var(--text-primary); font-size:0.8rem;">${dept}</span>
             <span style="color:#5e5ce6; font-weight:600; font-size:0.8rem;">${count} bản ghi</span>
           </div>
-        `).join('')}`;
+        `).join('')}
+        <div style="margin-top:20px; text-align:center;">
+          <button onclick="App.browseImportedRecords()" style="background:linear-gradient(135deg, #0a84ff, #5e5ce6); color:white; border:none; padding:14px 32px; border-radius:12px; font-size:1rem; font-weight:600; cursor:pointer; transition:transform 0.2s;">
+            🔍 Duyệt & AI Phân tích ${totalRows.toLocaleString()} hồ sơ →
+          </button>
+        </div>`;
+
+      resultsDiv.innerHTML = html;
     } else {
-      // Generic Excel file - show summary
-      html = `
+      // Generic Excel file
+      resultsDiv.innerHTML = `
         <div style="padding:16px; background:rgba(48,209,88,0.1); border:1px solid rgba(48,209,88,0.3); border-radius:12px; margin-bottom:12px;">
           <h4 style="color:#30d158;">✅ Đọc file thành công: ${fileName}</h4>
           <p style="color:var(--text-secondary); font-size:0.85rem;">${workbook.SheetNames.length} sheet · ${jsonData.length} dòng dữ liệu</p>
@@ -1511,8 +1518,210 @@ const App = {
           ${jsonData.length > 20 ? `<p style="color:var(--text-tertiary); font-size:0.75rem; padding:8px; text-align:center;">Hiển thị 20/${jsonData.length} dòng đầu tiên</p>` : ''}
         </div>`;
     }
+  },
 
-    resultsDiv.innerHTML = html;
+  // ========== BROWSE IMPORTED RECORDS ==========
+  browseImportedRecords() {
+    if (!this.importedRecords || !this.importedRecords.length) return;
+
+    // Switch to Kết quả tab
+    this.switchTab('results');
+
+    const container = document.getElementById('resultsContent');
+    if (!container) return;
+
+    // Group by patient
+    const patientMap = {};
+    this.importedRecords.forEach((row, idx) => {
+      const name = row.HO_TEN || row.ho_ten || 'Không rõ';
+      const ma = row.MA_BN || row.ma_bn || 'N/A';
+      const key = ma + '_' + name;
+      if (!patientMap[key]) {
+        patientMap[key] = { name, ma, rows: [] };
+      }
+      patientMap[key].rows.push(row);
+    });
+
+    const patients = Object.values(patientMap);
+    const pageSize = 20;
+    const totalPages = Math.ceil(patients.length / pageSize);
+
+    // Show first page
+    this.importedPatients = patients;
+    this.importedPage = 1;
+    this.renderImportedPage(1);
+  },
+
+  renderImportedPage(page) {
+    const container = document.getElementById('resultsContent');
+    if (!container || !this.importedPatients) return;
+
+    const pageSize = 20;
+    const totalPages = Math.ceil(this.importedPatients.length / pageSize);
+    const start = (page - 1) * pageSize;
+    const pagePatients = this.importedPatients.slice(start, start + pageSize);
+
+    let html = `
+      <div style="margin-bottom:16px; padding:16px; background:rgba(10,132,255,0.1); border:1px solid rgba(10,132,255,0.3); border-radius:12px;">
+        <h3 style="color:#0a84ff; margin-bottom:4px;">📋 Danh sách hồ sơ từ: ${this.importedFileName}</h3>
+        <p style="color:var(--text-secondary); font-size:0.85rem;">${this.importedPatients.length} bệnh nhân · ${this.importedRecords.length} bản ghi · Trang ${page}/${totalPages}</p>
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+        <button onclick="App.analyzeAllImported()" style="background:linear-gradient(135deg, #ff3b5c, #ff9500); color:white; border:none; padding:10px 20px; border-radius:10px; font-weight:600; cursor:pointer; font-size:0.85rem;">
+          🤖 AI Phân tích tất cả (${this.importedRecords.length} bản ghi)
+        </button>
+        ${page > 1 ? `<button onclick="App.renderImportedPage(${page - 1})" style="background:rgba(255,255,255,0.08); color:var(--text-primary); border:1px solid rgba(255,255,255,0.15); padding:10px 16px; border-radius:10px; cursor:pointer;">← Trang trước</button>` : ''}
+        ${page < totalPages ? `<button onclick="App.renderImportedPage(${page + 1})" style="background:rgba(255,255,255,0.08); color:var(--text-primary); border:1px solid rgba(255,255,255,0.15); padding:10px 16px; border-radius:10px; cursor:pointer;">Trang sau →</button>` : ''}
+      </div>`;
+
+    pagePatients.forEach((patient, idx) => {
+      const globalIdx = start + idx + 1;
+      const totalAmt = patient.rows.reduce((s, r) => s + parseFloat(r.tien_de_nghi_kt || r.THANH_TIEN || 0), 0);
+      const dept = patient.rows[0].MA_KHOA || patient.rows[0].ma_khoa || '';
+      const violations = [...new Set(patient.rows.map(r => r.ten_chuyen_de || r.TEN_CHUYEN_DE || '').filter(v => v))];
+      const reasons = [...new Set(patient.rows.map(r => r.LY_DO_TC || r.ly_do_tc || '').filter(v => v))];
+
+      const riskColor = totalAmt > 1000000 ? '#ff3b5c' : totalAmt > 200000 ? '#ff9500' : '#ffd60a';
+      const riskLabel = totalAmt > 1000000 ? '🚨 Cao' : totalAmt > 200000 ? '⚠️ TB' : '📝 Thấp';
+
+      html += `
+      <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div>
+            <span style="color:var(--text-tertiary); font-size:0.75rem;">#${globalIdx}</span>
+            <span style="color:var(--text-primary); font-weight:600; font-size:0.9rem; margin-left:8px;">${patient.name}</span>
+            <span style="color:var(--text-tertiary); font-size:0.75rem; margin-left:8px;">MaBN: ${patient.ma}</span>
+            ${dept ? `<span style="background:rgba(94,92,230,0.15); color:#5e5ce6; padding:2px 8px; border-radius:6px; font-size:0.7rem; margin-left:8px;">${dept}</span>` : ''}
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:${riskColor}; font-weight:700; font-size:0.85rem;">${totalAmt.toLocaleString('vi-VN')}đ</span>
+            <span style="background:${riskColor}22; color:${riskColor}; padding:3px 10px; border-radius:8px; font-size:0.7rem; font-weight:600;">${riskLabel}</span>
+          </div>
+        </div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <span style="color:var(--text-secondary); font-size:0.75rem;">📝 ${patient.rows.length} bản ghi</span>
+          ${violations.length > 0 ? `<span style="color:#ff9500; font-size:0.75rem;">⚠️ ${violations.join(', ')}</span>` : ''}
+          ${reasons.length > 0 ? `<span style="color:var(--text-tertiary); font-size:0.7rem; font-style:italic;">${reasons[0].substring(0, 80)}${reasons[0].length > 80 ? '...' : ''}</span>` : ''}
+        </div>
+      </div>`;
+    });
+
+    // Pagination
+    if (totalPages > 1) {
+      html += `<div style="display:flex; justify-content:center; gap:6px; margin-top:16px; flex-wrap:wrap;">`;
+      for (var p = 1; p <= totalPages; p++) {
+        var active = p === page ? 'background:#0a84ff; color:white;' : 'background:rgba(255,255,255,0.08); color:var(--text-secondary);';
+        html += `<button onclick="App.renderImportedPage(${p})" style="${active} border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:0.8rem;">${p}</button>`;
+      }
+      html += `</div>`;
+    }
+
+    container.innerHTML = html;
+  },
+
+  analyzeAllImported() {
+    if (!this.importedRecords || !this.engine) return;
+    const container = document.getElementById('resultsContent');
+    if (!container) return;
+
+    container.innerHTML = `<div style="text-align:center; padding:40px;">
+      <div class="spinner" style="margin:0 auto 16px;"></div>
+      <p style="color:var(--text-secondary);">🤖 AI đang phân tích ${this.importedRecords.length} bản ghi...</p>
+    </div>`;
+
+    // Use setTimeout to let UI update
+    setTimeout(() => {
+      // Group by patient and analyze
+      const patientMap = {};
+      this.importedRecords.forEach(row => {
+        const name = row.HO_TEN || row.ho_ten || 'Không rõ';
+        const ma = row.MA_BN || row.ma_bn || 'N/A';
+        const key = ma + '_' + name;
+        if (!patientMap[key]) patientMap[key] = { name, ma, rows: [] };
+        patientMap[key].rows.push(row);
+      });
+
+      const results = [];
+      Object.values(patientMap).forEach(patient => {
+        const totalAmt = patient.rows.reduce((s, r) => s + parseFloat(r.tien_de_nghi_kt || r.THANH_TIEN || 0), 0);
+        const dept = patient.rows[0].MA_KHOA || patient.rows[0].ma_khoa || '';
+        const violations = [...new Set(patient.rows.map(r => r.ten_chuyen_de || r.TEN_CHUYEN_DE || '').filter(v => v))];
+        const reasons = [...new Set(patient.rows.map(r => r.LY_DO_TC || r.ly_do_tc || '').filter(v => v))];
+        const maBenh = patient.rows[0].MA_BENH || patient.rows[0].ma_benh || '';
+        const services = patient.rows.map(r => r.TEN_CP || r.ten_cp || '').filter(v => v);
+
+        // Run rules engine
+        const claim = {
+          patientName: patient.name,
+          patientId: patient.ma,
+          department: dept,
+          diagnosis: maBenh,
+          drugs: [],
+          services: services.map(s => ({ name: s, code: '', price: 0 })),
+          supplies: []
+        };
+
+        let warnings = [];
+        try { warnings = this.engine.analyze(claim).warnings || []; } catch(e) {}
+
+        // Add import-specific warnings
+        violations.forEach(v => {
+          warnings.push({ severity: 'critical', message: `[BHXH] Vi phạm: ${v}`, rule: 'IMPORT' });
+        });
+        reasons.forEach(r => {
+          if (r && !warnings.some(w => w.message.includes(r.substring(0, 30)))) {
+            warnings.push({ severity: 'high', message: `Lý do từ chối: ${r}`, rule: 'IMPORT' });
+          }
+        });
+
+        results.push({ ...patient, totalAmt, dept, violations, reasons, warnings, services });
+      });
+
+      // Sort by amount (highest first)
+      results.sort((a, b) => b.totalAmt - a.totalAmt);
+
+      // Render results
+      const criticalCount = results.filter(r => r.warnings.some(w => w.severity === 'critical')).length;
+      const highCount = results.filter(r => r.warnings.some(w => w.severity === 'high')).length;
+      const totalAmt = results.reduce((s, r) => s + r.totalAmt, 0);
+
+      let html = `
+        <div style="margin-bottom:16px; padding:16px; background:rgba(255,59,92,0.1); border:1px solid rgba(255,59,92,0.3); border-radius:12px;">
+          <h3 style="color:#ff3b5c; margin-bottom:8px;">🤖 Kết quả AI Phân tích — ${this.importedFileName}</h3>
+          <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:0.85rem;">
+            <span style="color:#ff3b5c; font-weight:600;">🚨 ${criticalCount} nghiêm trọng</span>
+            <span style="color:#ff9500; font-weight:600;">⚠️ ${highCount} cần xem xét</span>
+            <span style="color:var(--text-secondary);">${results.length} bệnh nhân · ${(totalAmt / 1000000).toFixed(1)}M VNĐ</span>
+          </div>
+        </div>`;
+
+      results.slice(0, 50).forEach((r, idx) => {
+        const riskColor = r.warnings.some(w => w.severity === 'critical') ? '#ff3b5c' : r.warnings.length > 0 ? '#ff9500' : '#30d158';
+        html += `
+        <div style="background:rgba(255,255,255,0.03); border-left:3px solid ${riskColor}; border-radius:0 12px 12px 0; padding:12px 14px; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <div>
+              <span style="color:var(--text-primary); font-weight:600;">${r.name}</span>
+              <span style="color:var(--text-tertiary); font-size:0.75rem; margin-left:8px;">${r.ma}</span>
+              ${r.dept ? `<span style="background:rgba(94,92,230,0.15); color:#5e5ce6; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:6px;">${r.dept}</span>` : ''}
+            </div>
+            <span style="color:${riskColor}; font-weight:700;">${r.totalAmt.toLocaleString('vi-VN')}đ</span>
+          </div>
+          ${r.warnings.slice(0, 3).map(w => `
+            <div style="color:${w.severity === 'critical' ? '#ff3b5c' : '#ff9500'}; font-size:0.78rem; padding:2px 0;">
+              ${w.severity === 'critical' ? '🚨' : '⚠️'} ${w.message}
+            </div>
+          `).join('')}
+          ${r.warnings.length > 3 ? `<div style="color:var(--text-tertiary); font-size:0.7rem;">+${r.warnings.length - 3} cảnh báo khác</div>` : ''}
+        </div>`;
+      });
+
+      if (results.length > 50) {
+        html += `<p style="color:var(--text-tertiary); text-align:center; padding:12px;">Hiển thị 50/${results.length} bệnh nhân có rủi ro cao nhất</p>`;
+      }
+
+      container.innerHTML = html;
+    }, 100);
   }
 };
 
