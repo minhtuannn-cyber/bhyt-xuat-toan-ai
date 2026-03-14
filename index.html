@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Hệ thống AI Cảnh báo Xuất Toán BHYT thông minh - Bệnh viện Đa khoa Khu vực Phú Thọ. Kiểm tra hồ sơ KCB BHYT trước khi gửi cổng thanh toán.">
+  <title>AI Cảnh báo Xuất Toán BHYT | BV ĐKKV Phú Thọ</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- Loading Spinner -->
+<div class="spinner-overlay" id="spinnerOverlay">
+  <div class="spinner"></div>
+  <div class="spinner-text">🤖 AI đang phân tích hồ sơ BHYT...</div>
+</div>
+
+<div class="app-container">
+
+  <!-- ===== HEADER ===== -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="header-logo">🛡️</div>
+      <div class="header-title">
+        <h1>AI Cảnh báo Xuất Toán BHYT</h1>
+        <span class="subtitle">Bệnh viện Đa khoa Khu vực Phú Thọ</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="header-badge">
+        <span class="dot"></span>
+        Hệ thống hoạt động
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== NAVIGATION TABS ===== -->
+  <nav class="nav-tabs" id="navTabs">
+    <button class="nav-tab active" data-tab="dashboard">
+      <span class="tab-icon">📊</span> Tổng quan
+    </button>
+    <button class="nav-tab" data-tab="check">
+      <span class="tab-icon">🔍</span> Kiểm tra Hồ sơ
+    </button>
+    <button class="nav-tab" data-tab="results" id="resultsTab">
+      <span class="tab-icon">⚠️</span> Kết quả
+      <span class="tab-badge" id="resultsBadge" style="display:none;">0</span>
+    </button>
+    <button class="nav-tab" data-tab="regulations">
+      <span class="tab-icon">📋</span> Quy định BHYT
+    </button>
+    <button class="nav-tab" data-tab="history">
+      <span class="tab-icon">📁</span> Lịch sử
+    </button>
+  </nav>
+
+  <!-- ===================================================================== -->
+  <!-- TAB 1: DASHBOARD -->
+  <!-- ===================================================================== -->
+  <div class="tab-content active" id="tab-dashboard">
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card kpi-total">
+        <div class="kpi-header">
+          <div class="kpi-icon">📋</div>
+          <div class="kpi-trend down">↓ 12%</div>
+        </div>
+        <div class="kpi-value" id="kpiTotal">0</div>
+        <div class="kpi-label">Hồ sơ đã kiểm tra</div>
+      </div>
+      <div class="kpi-card kpi-critical">
+        <div class="kpi-header">
+          <div class="kpi-icon">🚨</div>
+          <div class="kpi-trend up">↑ 3%</div>
+        </div>
+        <div class="kpi-value" id="kpiCritical">0</div>
+        <div class="kpi-label">Cảnh báo nghiêm trọng</div>
+      </div>
+      <div class="kpi-card kpi-warning">
+        <div class="kpi-header">
+          <div class="kpi-icon">⚠️</div>
+          <div class="kpi-trend down">↓ 5%</div>
+        </div>
+        <div class="kpi-value" id="kpiWarning">0</div>
+        <div class="kpi-label">Cảnh báo cần xem xét</div>
+      </div>
+      <div class="kpi-card kpi-safe">
+        <div class="kpi-header">
+          <div class="kpi-icon">✅</div>
+          <div class="kpi-trend down">↑ 8%</div>
+        </div>
+        <div class="kpi-value" id="kpiSafe">0</div>
+        <div class="kpi-label">Hồ sơ an toàn</div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-grid">
+      <div class="glass-card">
+        <div class="card-header">
+          <div class="card-title"><span class="icon">📈</span> Phân loại cảnh báo</div>
+        </div>
+        <div class="chart-container">
+          <canvas id="chartWarningTypes"></canvas>
+        </div>
+      </div>
+      <div class="glass-card">
+        <div class="card-header">
+          <div class="card-title"><span class="icon">📊</span> Top lỗi xuất toán phổ biến</div>
+        </div>
+        <div class="chart-container">
+          <canvas id="chartTopErrors"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- BHXH Real Stats Dashboard -->
+    <div class="glass-card">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">🏥</span> Thống kê Xuất Toán Thực tế — BHXH Phú Thọ Q2/2025</div>
+        <div class="header-badge" style="background: var(--status-critical-bg); border-color: var(--status-critical-border); color: var(--status-critical);">
+          Tổng: 220,692,455 VNĐ
+        </div>
+      </div>
+      <div class="stats-dashboard" id="realStatsDashboard">
+        <div class="stats-summary" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px;">
+          <div style="background:rgba(255,59,92,0.1); border:1px solid rgba(255,59,92,0.3); border-radius:12px; padding:16px; text-align:center;">
+            <div style="font-size:1.5rem; font-weight:700; color:#ff3b5c;">39</div>
+            <div style="font-size:0.75rem; color:var(--text-secondary);">Loại xuất toán</div>
+          </div>
+          <div style="background:rgba(255,149,0,0.1); border:1px solid rgba(255,149,0,0.3); border-radius:12px; padding:16px; text-align:center;">
+            <div style="font-size:1.5rem; font-weight:700; color:#ff9500;">22</div>
+            <div style="font-size:0.75rem; color:var(--text-secondary);">Lỗi DVKT</div>
+          </div>
+          <div style="background:rgba(48,209,88,0.1); border:1px solid rgba(48,209,88,0.3); border-radius:12px; padding:16px; text-align:center;">
+            <div style="font-size:1.5rem; font-weight:700; color:#30d158;">17</div>
+            <div style="font-size:0.75rem; color:var(--text-secondary);">Lỗi Thuốc</div>
+          </div>
+          <div style="background:rgba(94,92,230,0.1); border:1px solid rgba(94,92,230,0.3); border-radius:12px; padding:16px; text-align:center;">
+            <div style="font-size:1.5rem; font-weight:700; color:#5e5ce6;">5</div>
+            <div style="font-size:0.75rem; color:var(--text-secondary);">Khoa bị ảnh hưởng</div>
+          </div>
+        </div>
+        <!-- Top 5 Rejection Categories -->
+        <h4 style="color:var(--text-primary); margin-bottom:12px;">🔥 Top 5 Lỗi Xuất Toán Lớn Nhất</h4>
+        <div id="topRejectionsChart" style="margin-bottom: 20px;"></div>
+        <!-- Department Breakdown -->
+        <h4 style="color:var(--text-primary); margin-bottom:12px;">🏢 Phân bổ theo Khoa</h4>
+        <div id="deptBreakdown" style="margin-bottom: 12px;"></div>
+      </div>
+    </div>
+
+    <!-- Excel Import Feature -->
+    <div class="glass-card">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">📤</span> Import File Excel BHXH</div>
+        <div class="header-badge" style="background: rgba(94,92,230,0.15); border-color: rgba(94,92,230,0.3); color: #5e5ce6;">
+          Tự động phân tích
+        </div>
+      </div>
+      <div class="excel-import-zone" id="excelDropZone" style="border:2px dashed rgba(255,255,255,0.15); border-radius:16px; padding:40px; text-align:center; cursor:pointer; transition:all 0.3s; margin-bottom:16px;" 
+           ondragover="event.preventDefault(); this.style.borderColor='#5e5ce6'; this.style.background='rgba(94,92,230,0.1)';"
+           ondragleave="this.style.borderColor='rgba(255,255,255,0.15)'; this.style.background='transparent';"
+           ondrop="event.preventDefault(); this.style.borderColor='rgba(255,255,255,0.15)'; this.style.background='transparent'; App.handleExcelDrop(event);"
+           onclick="document.getElementById('excelFileInput').click();">
+        <div style="font-size:3rem; margin-bottom:12px;">📊</div>
+        <h3 style="color:var(--text-primary); margin-bottom:8px;">Kéo thả file Excel vào đây</h3>
+        <p style="color:var(--text-secondary); font-size:0.85rem;">hoặc click để chọn file · Hỗ trợ .xlsx, .xls</p>
+        <p style="color:var(--text-tertiary); font-size:0.75rem; margin-top:8px;">File dvkt02 hoặc Tổng hợp dữ liệu BHXH</p>
+        <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display:none;" onchange="App.handleExcelFile(this.files[0]);">
+      </div>
+      <div id="excelImportResults" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- TAB 2: CHECK FORM -->
+  <!-- ===================================================================== -->
+  <div class="tab-content" id="tab-check">
+    <form id="claimForm" autocomplete="off">
+
+      <!-- Patient & Card Info -->
+      <div class="glass-card">
+        <div class="card-header">
+          <div class="card-title"><span class="icon">👤</span> Thông tin Bệnh nhân & Thẻ BHYT</div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Họ và tên <span class="required">*</span></label>
+            <input type="text" class="form-input" id="patientName" placeholder="Nguyễn Văn A" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Số thẻ BHYT <span class="required">*</span></label>
+            <input type="text" class="form-input" id="cardNumber" placeholder="DN4950123456789" maxlength="15" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ngày hết hạn thẻ</label>
+            <input type="date" class="form-input" id="cardExpiry">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nơi đăng ký KCB ban đầu</label>
+            <input type="text" class="form-input" id="registeredFacility" placeholder="BV ĐKKV Phú Thọ">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Đối tượng BHYT</label>
+            <select class="form-select" id="bhytType">
+              <option value="">-- Chọn --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">
+              <input type="checkbox" id="hasReferral"> Có giấy chuyển tuyến
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Visit Info -->
+      <div class="glass-card">
+        <div class="card-header">
+          <div class="card-title"><span class="icon">🏥</span> Thông tin Khám chữa bệnh</div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Loại KCB <span class="required">*</span></label>
+            <select class="form-select" id="visitType" required>
+              <option value="">-- Chọn --</option>
+              <option value="outpatient">Ngoại trú</option>
+              <option value="inpatient">Nội trú</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ngày KCB <span class="required">*</span></label>
+            <input type="date" class="form-input" id="visitDate" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mã bệnh ICD-10 <span class="required">*</span></label>
+            <input type="text" class="form-input" id="icdCode" placeholder="I10" list="icdList">
+            <datalist id="icdList"></datalist>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Chẩn đoán bệnh <span class="required">*</span></label>
+            <input type="text" class="form-input" id="diagnosis" placeholder="Tăng huyết áp nguyên phát">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Khoa điều trị</label>
+            <select class="form-select" id="department">
+              <option value="">-- Chọn --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">
+              <input type="checkbox" id="isSecondVisit"> Lượt khám thứ 2+ cùng ngày
+            </label>
+          </div>
+        </div>
+
+        <!-- Inpatient fields -->
+        <div id="inpatientFields" style="display:none;">
+          <div class="section-divider"></div>
+          <div class="section-title"><span class="icon">🛏️</span> Thông tin Nội trú</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Ngày nhập viện</label>
+              <input type="date" class="form-input" id="admissionDate">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Ngày ra viện</label>
+              <input type="date" class="form-input" id="dischargeDate">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Loại giường</label>
+              <select class="form-select" id="bedType">
+                <option value="">-- Chọn --</option>
+                <option value="icu">Giường HSTC (ICU)</option>
+                <option value="specialCare">Giường cấp cứu</option>
+                <option value="surgery">Giường sau phẫu thuật</option>
+                <option value="inpatient">Giường nội trú thường</option>
+                <option value="daycare">Giường ban ngày</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Số ngày nằm viện</label>
+              <input type="number" class="form-input" id="bedDays" min="1" placeholder="5">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Giá giường/ngày (VNĐ)</label>
+              <input type="number" class="form-input" id="bedPrice" placeholder="185000">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Drugs -->
+      <div class="glass-card">
+        <div class="card-header">
+          <div class="card-title"><span class="icon">💊</span> Danh sách Thuốc</div>
+          <button type="button" class="btn btn-secondary" onclick="App.addDrug()">
+            <span class="btn-icon">➕</span> Thêm thuốc
+          </button>
+        </div>
+        <div class="dynamic-list" id="drugList">
+          <!-- Dynamic drug rows -->
+        </div>
+        <button type="button" class="btn-add-item" onclick="App.addDrug()" id="btnAddDrug">
+          ➕ Nhấn để thêm thuốc vào đơn
+        </button>
+      </div>
+
+      <!-- Services -->
+      <div class="glass-card">
+        <div class="card-header">
+          <div class="card-title"><span class="icon">🔬</span> Dịch vụ Kỹ thuật</div>
+          <button type="button" class="btn btn-secondary" onclick="App.addService()">
+            <span class="btn-icon">➕</span> Thêm DVKT
+          </button>
+        </div>
+        <div class="dynamic-list" id="serviceList">
+          <!-- Dynamic service rows -->
+        </div>
+        <button type="button" class="btn-add-item" onclick="App.addService()">
+          ➕ Nhấn để thêm dịch vụ kỹ thuật
+        </button>
+      </div>
+
+      <!-- Supplies -->
+      <div class="glass-card">
+        <div class="card-header">
+          <div class="card-title"><span class="icon">🩹</span> Vật tư Y tế</div>
+          <button type="button" class="btn btn-secondary" onclick="App.addSupply()">
+            <span class="btn-icon">➕</span> Thêm VTYT
+          </button>
+        </div>
+        <div class="dynamic-list" id="supplyList">
+          <!-- Dynamic supply rows -->
+        </div>
+        <button type="button" class="btn-add-item" onclick="App.addSupply()">
+          ➕ Nhấn để thêm vật tư y tế
+        </button>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary btn-lg" id="btnAnalyze">
+          <span class="btn-icon">🤖</span> AI Phân tích Hồ sơ
+        </button>
+        <button type="button" class="btn btn-secondary btn-lg" onclick="App.resetForm()">
+          <span class="btn-icon">🔄</span> Xóa & Nhập lại
+        </button>
+        <button type="button" class="btn btn-secondary btn-lg" onclick="App.fillSampleData()">
+          <span class="btn-icon">📝</span> Dữ liệu mẫu
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- TAB 3: RESULTS -->
+  <!-- ===================================================================== -->
+  <div class="tab-content" id="tab-results">
+    <div id="resultPanel">
+      <div class="empty-state" id="noResults">
+        <div class="empty-state-icon">🔍</div>
+        <h3>Chưa có kết quả kiểm tra</h3>
+        <p>Hãy nhập thông tin hồ sơ BHYT tại tab "Kiểm tra Hồ sơ" và nhấn "AI Phân tích" để xem kết quả</p>
+      </div>
+
+      <div class="result-panel" id="analysisResults">
+        <!-- Risk Meter -->
+        <div class="glass-card">
+          <div class="risk-meter">
+            <div class="risk-gauge">
+              <svg viewBox="0 0 200 200">
+                <circle class="gauge-bg" cx="100" cy="100" r="85"/>
+                <circle class="gauge-fill" id="gaugeFill" cx="100" cy="100" r="85"
+                  stroke-dasharray="534" stroke-dashoffset="534"/>
+              </svg>
+              <div class="gauge-center">
+                <div class="risk-score-value" id="riskScoreDisplay">0</div>
+                <div class="risk-score-label">ĐIỂM RỦI RO</div>
+              </div>
+            </div>
+            <div class="risk-level-badge" id="riskLevelBadge">
+              <span>⚡</span> <span id="riskLevelText">ĐANG PHÂN TÍCH</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Warning Summary -->
+        <div class="warning-summary" id="warningSummary">
+          <div class="warning-stat critical">
+            <div>
+              <div class="warning-stat-value" id="criticalCountDisplay">0</div>
+              <div class="warning-stat-label">Nghiêm trọng</div>
+            </div>
+          </div>
+          <div class="warning-stat warning">
+            <div>
+              <div class="warning-stat-value" id="warningCountDisplay">0</div>
+              <div class="warning-stat-label">Cảnh báo</div>
+            </div>
+          </div>
+          <div class="warning-stat info">
+            <div>
+              <div class="warning-stat-value" id="infoCountDisplay">0</div>
+              <div class="warning-stat-label">Gợi ý</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Patient Info Summary -->
+        <div class="glass-card">
+          <div class="card-header">
+            <div class="card-title"><span class="icon">👤</span> Thông tin Hồ sơ</div>
+            <button class="btn btn-secondary" onclick="App.exportReport()">
+              <span class="btn-icon">📄</span> Xuất báo cáo
+            </button>
+          </div>
+          <div id="patientSummary"></div>
+        </div>
+
+        <!-- Warning Details -->
+        <div class="glass-card">
+          <div class="card-header">
+            <div class="card-title"><span class="icon">⚠️</span> Chi tiết Cảnh báo</div>
+            <div style="display:flex; gap: 8px;">
+              <button class="btn btn-secondary" onclick="App.filterWarnings('all')" data-filter="all">Tất cả</button>
+              <button class="btn btn-secondary" onclick="App.filterWarnings('critical')" data-filter="critical">🚨 Nghiêm trọng</button>
+              <button class="btn btn-secondary" onclick="App.filterWarnings('warning')" data-filter="warning">⚠️ Cảnh báo</button>
+              <button class="btn btn-secondary" onclick="App.filterWarnings('info')" data-filter="info">ℹ️ Gợi ý</button>
+            </div>
+          </div>
+          <div class="warning-list" id="warningList">
+            <!-- Populated dynamically -->
+          </div>
+          <div class="empty-state" id="noWarnings" style="display:none;">
+            <div class="empty-state-icon">✅</div>
+            <h3>Không có cảnh báo!</h3>
+            <p>Hồ sơ này an toàn, có thể gửi lên cổng thanh toán BHXH</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- TAB 4: REGULATIONS -->
+  <!-- ===================================================================== -->
+  <div class="tab-content" id="tab-regulations">
+    <!-- Regulations List -->
+    <div class="glass-card">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">📋</span> Văn bản Quy định BHYT</div>
+      </div>
+      <div class="reg-grid" id="regGrid">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+
+    <!-- Non-covered Cases -->
+    <div class="glass-card">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">🚫</span> 12 Trường hợp KHÔNG được BHYT Thanh toán</div>
+        <div class="header-badge" style="background: var(--status-critical-bg); border-color: var(--status-critical-border); color: var(--status-critical);">
+          Luật BHYT sửa đổi 2024 · Hiệu lực 01/07/2025
+        </div>
+      </div>
+      <div class="nc-list" id="ncList">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+
+    <!-- Real Rejection Categories from BHXH Audit -->
+    <div class="glass-card">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">📊</span> 39 Loại Xuất Toán Thực tế — BV ĐKKV Phú Thọ Q2/2025</div>
+        <div class="header-badge" style="background: var(--status-warning-bg); border-color: var(--status-warning-border); color: var(--status-warning);">
+          Dữ liệu từ BHXH Phú Thọ · Tổng: 220,692,455 VNĐ
+        </div>
+      </div>
+      <div class="nc-list" id="realRejectionList">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+
+    <!-- Key Rules -->
+    <div class="glass-card">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">📌</span> Các Quy tắc Quan trọng cần Lưu ý</div>
+      </div>
+      <div class="nc-list">
+        <div class="nc-item">
+          <div class="nc-number" style="background: var(--status-warning-bg); color: var(--status-warning);">!</div>
+          <div class="nc-content">
+            <h4>Tối đa 65 lượt khám/bàn/ngày (TT39/2024)</h4>
+            <p>BHXH không thanh toán tiền khám bệnh từ lượt thứ 66 trở lên nếu bàn khám vượt 65 lượt/ngày trong 3 tháng liên tiếp.</p>
+          </div>
+        </div>
+        <div class="nc-item">
+          <div class="nc-number" style="background: var(--status-warning-bg); color: var(--status-warning);">!</div>
+          <div class="nc-content">
+            <h4>Khám lần 2+ cùng ngày chỉ tính 30% (TT39/2024)</h4>
+            <p>Nếu bệnh nhân khám từ lần thứ 2 trở đi cùng ngày tại cùng cơ sở KCB, chỉ tính 30% mức giá một lần khám.</p>
+          </div>
+        </div>
+        <div class="nc-item">
+          <div class="nc-number" style="background: var(--status-warning-bg); color: var(--status-warning);">!</div>
+          <div class="nc-content">
+            <h4>Đơn thuốc ngoại trú bắt buộc có mã ICD-10</h4>
+            <p>Thiếu mã bệnh trên đơn thuốc là lỗi xuất toán phổ biến nhất trong điều trị ngoại trú.</p>
+          </div>
+        </div>
+        <div class="nc-item">
+          <div class="nc-number" style="background: var(--status-warning-bg); color: var(--status-warning);">!</div>
+          <div class="nc-content">
+            <h4>VTYT nội trú không thanh toán riêng</h4>
+            <p>Một số vật tư y tế (bơm tiêm, dây truyền dịch...) không được thanh toán riêng trong điều trị nội trú.</p>
+          </div>
+        </div>
+        <div class="nc-item">
+          <div class="nc-number" style="background: var(--status-warning-bg); color: var(--status-warning);">!</div>
+          <div class="nc-content">
+            <h4>Thuốc & TBYT phải phù hợp phạm vi chuyên môn (TT22/2024)</h4>
+            <p>Thuốc và TBYT kê đơn phải phù hợp phạm vi chuyên môn của cơ sở KCB và thuộc quyền lợi người tham gia BHYT.</p>
+          </div>
+        </div>
+        <div class="nc-item">
+          <div class="nc-number" style="background: var(--status-warning-bg); color: var(--status-warning);">!</div>
+          <div class="nc-content">
+            <h4>Giá thuốc không vượt giá trúng thầu thấp nhất</h4>
+            <p>Mức thanh toán thuốc BHYT không được vượt quá đơn giá trúng thầu thấp nhất tại thời điểm gần nhất.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- TAB 5: HISTORY -->
+  <!-- ===================================================================== -->
+  <div class="tab-content" id="tab-history">
+    <div class="glass-card">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">📁</span> Lịch sử Kiểm tra</div>
+        <button class="btn btn-danger" onclick="App.clearHistory()">
+          <span class="btn-icon">🗑️</span> Xóa lịch sử
+        </button>
+      </div>
+      <div id="historyContent">
+        <div class="empty-state">
+          <div class="empty-state-icon">📁</div>
+          <h3>Chưa có lịch sử kiểm tra</h3>
+          <p>Các hồ sơ đã kiểm tra sẽ được lưu tại đây</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="data.js"></script>
+<script src="rules-engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
