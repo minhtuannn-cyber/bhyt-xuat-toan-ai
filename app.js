@@ -1323,53 +1323,57 @@ const App = {
 
   // ========== REAL STATS DASHBOARD ==========
   initRealStats() {
-    const stats = window.BHYTData?.REAL_STATS;
-    const rules = window.BHYTData?.REAL_REJECTION_RULES;
-    if (!stats || !rules) return;
+    var stats = window.BHYTData && window.BHYTData.REAL_STATS;
+    if (!stats || !stats.topRejections) {
+      setTimeout(function() { App.initRealStats(); }, 500);
+      return;
+    }
 
-    // Top 5 rejections with progress bars
-    const topContainer = document.getElementById('topRejectionsChart');
-    if (topContainer && stats.topRejections) {
-      const maxAmount = stats.topRejections[0]?.amount || 1;
-      topContainer.innerHTML = stats.topRejections.map((r, i) => {
-        const pct = ((r.amount / stats.totalRejectionAmount) * 100).toFixed(1);
-        const barPct = ((r.amount / maxAmount) * 100).toFixed(0);
-        const colors = ['#ff3b5c', '#ff9500', '#ffd60a', '#5e5ce6', '#30d158'];
-        return `<div style="margin-bottom:14px;">
-          <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-            <span style="color:var(--text-primary); font-size:0.85rem; font-weight:500;">
-              <span style="color:${colors[i]}">●</span> [${r.code}] ${r.title}
-            </span>
-            <span style="color:${colors[i]}; font-weight:700; font-size:0.85rem;">${r.amount.toLocaleString('vi-VN')}đ (${pct}%)</span>
-          </div>
-          <div style="background:rgba(255,255,255,0.05); border-radius:6px; height:8px; overflow:hidden;">
-            <div style="background:${colors[i]}; height:100%; width:${barPct}%; border-radius:6px; transition:width 1s ease;"></div>
-          </div>
-        </div>`;
-      }).join('');
+    // Top 5 rejections
+    var topEl = document.getElementById('topRejectionsChart');
+    if (topEl) {
+      var maxAmt = stats.topRejections[0].amount;
+      var colors = ['#ff3b5c', '#ff9500', '#ffd60a', '#5e5ce6', '#30d158'];
+      var html = '';
+      for (var i = 0; i < stats.topRejections.length; i++) {
+        var r = stats.topRejections[i];
+        var pct = (r.amount / stats.totalRejectionAmount * 100).toFixed(1);
+        var barW = (r.amount / maxAmt * 100).toFixed(0);
+        var c = colors[i];
+        html += '<div style="margin-bottom:14px;">';
+        html += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">';
+        html += '<span style="color:var(--text-primary);font-size:0.85rem;font-weight:500;">';
+        html += '<span style="color:' + c + '">●</span> [' + r.code + '] ' + r.title;
+        html += '</span>';
+        html += '<span style="color:' + c + ';font-weight:700;font-size:0.85rem;">' + r.amount.toLocaleString('vi-VN') + 'đ (' + pct + '%)</span>';
+        html += '</div>';
+        html += '<div style="background:rgba(255,255,255,0.05);border-radius:6px;height:8px;overflow:hidden;">';
+        html += '<div style="background:' + c + ';height:100%;width:' + barW + '%;border-radius:6px;transition:width 1s ease;"></div>';
+        html += '</div></div>';
+      }
+      topEl.innerHTML = html;
     }
 
     // Department breakdown
-    const deptContainer = document.getElementById('deptBreakdown');
-    if (deptContainer && stats.topDepartments) {
-      const maxDeptAmount = stats.topDepartments[0]?.amount || 1;
-      deptContainer.innerHTML = stats.topDepartments.map(d => {
-        const pct = ((d.amount / maxDeptAmount) * 100).toFixed(0);
-        return `<div style="display:flex; align-items:center; gap:12px; margin-bottom:10px; padding:10px 14px; background:rgba(255,255,255,0.03); border-radius:10px;">
-          <div style="flex:1;">
-            <div style="color:var(--text-primary); font-size:0.85rem; font-weight:500;">${d.name}</div>
-            <div style="color:var(--text-tertiary); font-size:0.7rem;">${d.patients} BN · ${d.records} bản ghi</div>
-          </div>
-          <div style="width:120px;">
-            <div style="background:rgba(255,255,255,0.05); border-radius:4px; height:6px; overflow:hidden;">
-              <div style="background:#5e5ce6; height:100%; width:${pct}%; border-radius:4px;"></div>
-            </div>
-          </div>
-          <div style="color:#5e5ce6; font-weight:600; font-size:0.8rem; min-width:90px; text-align:right;">
-            ${d.amount.toLocaleString('vi-VN')}đ
-          </div>
-        </div>`;
-      }).join('');
+    var deptEl = document.getElementById('deptBreakdown');
+    if (deptEl && stats.topDepartments) {
+      var maxDept = stats.topDepartments[0].amount;
+      var dhtml = '';
+      for (var j = 0; j < stats.topDepartments.length; j++) {
+        var d = stats.topDepartments[j];
+        var dp = (d.amount / maxDept * 100).toFixed(0);
+        dhtml += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:10px;">';
+        dhtml += '<div style="flex:1;">';
+        dhtml += '<div style="color:var(--text-primary);font-size:0.85rem;font-weight:500;">' + d.name + '</div>';
+        dhtml += '<div style="color:var(--text-tertiary);font-size:0.7rem;">' + d.patients + ' BN · ' + d.records + ' bản ghi</div>';
+        dhtml += '</div>';
+        dhtml += '<div style="width:120px;"><div style="background:rgba(255,255,255,0.05);border-radius:4px;height:6px;overflow:hidden;">';
+        dhtml += '<div style="background:#5e5ce6;height:100%;width:' + dp + '%;border-radius:4px;"></div>';
+        dhtml += '</div></div>';
+        dhtml += '<div style="color:#5e5ce6;font-weight:600;font-size:0.8rem;min-width:90px;text-align:right;">' + d.amount.toLocaleString('vi-VN') + 'đ</div>';
+        dhtml += '</div>';
+      }
+      deptEl.innerHTML = dhtml;
     }
   },
 
