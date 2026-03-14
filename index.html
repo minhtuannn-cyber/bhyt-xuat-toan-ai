@@ -560,8 +560,18 @@
 
 </div>
 
-<script src="data.js"></script>
-<script src="rules-engine.js"></script>
-<script src="app.js"></script>
+<script src="data.js?v=2"></script>
+<script src="rules-engine.js?v=2"></script>
+<script src="app.js?v=2"></script>
+<script>
+// Fallback: ensure real stats render after everything loads
+window.addEventListener('load', function() {
+  setTimeout(function() {
+    if (window.App && window.BHYTData && window.BHYTData.REAL_STATS) {
+      App.initRealStats();
+    }
+  }, 300);
+});
+</script>
 </body>
 </html>
