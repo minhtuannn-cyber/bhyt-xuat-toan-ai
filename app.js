@@ -1747,7 +1747,165 @@ const App = {
       }
 
       container.innerHTML = html;
+
+      // Sync results to dashboard
+      this.updateDashboardFromImport(results, totalAmt);
     }, 100);
+  },
+
+  // ========== SYNC TO DASHBOARD ==========
+  updateDashboardFromImport(results, totalImportAmt) {
+    if (!results || !results.length) return;
+
+    // 1. Update KPI Cards
+    const totalPatients = results.length;
+    const criticalPatients = results.filter(r => r.warnings.some(w => w.severity === 'critical')).length;
+    const warningPatients = results.filter(r => r.warnings.length > 0 && !r.warnings.some(w => w.severity === 'critical')).length;
+    const safePatients = results.filter(r => r.warnings.length === 0).length;
+
+    const kpiTotal = document.getElementById('kpiTotal');
+    const kpiCritical = document.getElementById('kpiCritical');
+    const kpiWarning = document.getElementById('kpiWarning');
+    const kpiSafe = document.getElementById('kpiSafe');
+
+    if (kpiTotal) kpiTotal.textContent = totalPatients;
+    if (kpiCritical) kpiCritical.textContent = criticalPatients;
+    if (kpiWarning) kpiWarning.textContent = warningPatients;
+    if (kpiSafe) kpiSafe.textContent = safePatients;
+
+    // 2. Update Chart.js Charts
+    if (this.charts && this.charts.warningTypes) {
+      this.charts.warningTypes.data.datasets[0].data = [
+        criticalPatients,
+        warningPatients,
+        safePatients > 0 ? Math.floor(safePatients / 2) : 0,
+        safePatients
+      ];
+      this.charts.warningTypes.update();
+    }
+
+    // Count warning types from all results
+    const warningCounts = {};
+    results.forEach(r => {
+      r.warnings.forEach(w => {
+        // Extract category from message
+        let cat = 'Khác';
+        const msg = w.message.toLowerCase();
+        if (msg.includes('icd') || msg.includes('chẩn đoán') || msg.includes('mã bệnh')) cat = 'Thiếu mã ICD';
+        else if (msg.includes('giá') || msg.includes('trần') || msg.includes('vượt')) cat = 'Vượt giá trần';
+        else if (msg.includes('thẻ') || msg.includes('hết hạn') || msg.includes('bảo hiểm')) cat = 'Thẻ hết hạn';
+        else if (msg.includes('chống chỉ định') || msg.includes('contraindic')) cat = 'Chống chỉ định';
+        else if (msg.includes('tuyến') || msg.includes('chuyển')) cat = 'Trái tuyến';
+        else if (msg.includes('vtyt') || msg.includes('vật tư')) cat = 'VTYT riêng';
+        else if (msg.includes('dvkt') || msg.includes('dịch vụ')) cat = 'Lỗi DVKT';
+        else if (msg.includes('thuốc') || msg.includes('drug')) cat = 'Lỗi thuốc';
+        else if (msg.includes('vi phạm')) cat = w.message.split(':').pop().trim().substring(0, 20);
+        warningCounts[cat] = (warningCounts[cat] || 0) + 1;
+      });
+    });
+
+    if (this.charts && this.charts.topErrors) {
+      const sortedWarnings = Object.entries(warningCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+      const chartColors = ['#ff3b5c', '#ff9500', '#8b5cf6', '#f43f5e', '#00b4d8', '#00c9a7'];
+      this.charts.topErrors.data.labels = sortedWarnings.map(w => w[0]);
+      this.charts.topErrors.data.datasets[0].data = sortedWarnings.map(w => w[1]);
+      this.charts.topErrors.data.datasets[0].backgroundColor = sortedWarnings.map((_, i) => chartColors[i % chartColors.length] + '99');
+      this.charts.topErrors.data.datasets[0].borderColor = sortedWarnings.map((_, i) => chartColors[i % chartColors.length]);
+      this.charts.topErrors.update();
+    }
+
+    // 3. Update Real Stats Section
+    // Update total amount badge
+    const headerBadge = document.querySelector('#realStatsDashboard');
+    if (headerBadge) {
+      const parentCard = headerBadge.closest('.glass-card');
+      if (parentCard) {
+        const badge = parentCard.querySelector('.header-badge');
+        if (badge) badge.textContent = 'Tổng: ' + totalImportAmt.toLocaleString('vi-VN') + ' VNĐ';
+        const cardTitle = parentCard.querySelector('.card-title');
+        if (cardTitle) cardTitle.innerHTML = '<span class="icon">🏥</span> Thống kê từ file: ' + (this.importedFileName || 'Excel');
+      }
+    }
+
+    // Update stats summary cards
+    const statsSummary = document.querySelector('#realStatsDashboard .stats-summary');
+    if (statsSummary) {
+      const uniqueViolationTypes = Object.keys(warningCounts).length;
+      const dvktCount = Object.entries(warningCounts).filter(([k]) => k.includes('DVKT') || k.includes('dịch vụ')).reduce((s, [, v]) => s + v, 0);
+      const drugCount = Object.entries(warningCounts).filter(([k]) => k.includes('thuốc') || k.includes('chỉ định')).reduce((s, [, v]) => s + v, 0);
+      const depts = [...new Set(results.map(r => r.dept).filter(d => d))];
+
+      statsSummary.innerHTML = `
+        <div style="background:rgba(255,59,92,0.1); border:1px solid rgba(255,59,92,0.3); border-radius:12px; padding:16px; text-align:center;">
+          <div style="font-size:1.5rem; font-weight:700; color:#ff3b5c;">${uniqueViolationTypes}</div>
+          <div style="font-size:0.75rem; color:var(--text-secondary);">Loại cảnh báo</div>
+        </div>
+        <div style="background:rgba(255,149,0,0.1); border:1px solid rgba(255,149,0,0.3); border-radius:12px; padding:16px; text-align:center;">
+          <div style="font-size:1.5rem; font-weight:700; color:#ff9500;">${criticalPatients + warningPatients}</div>
+          <div style="font-size:0.75rem; color:var(--text-secondary);">BN có cảnh báo</div>
+        </div>
+        <div style="background:rgba(48,209,88,0.1); border:1px solid rgba(48,209,88,0.3); border-radius:12px; padding:16px; text-align:center;">
+          <div style="font-size:1.5rem; font-weight:700; color:#30d158;">${this.importedRecords ? this.importedRecords.length : 0}</div>
+          <div style="font-size:0.75rem; color:var(--text-secondary);">Tổng bản ghi</div>
+        </div>
+        <div style="background:rgba(94,92,230,0.1); border:1px solid rgba(94,92,230,0.3); border-radius:12px; padding:16px; text-align:center;">
+          <div style="font-size:1.5rem; font-weight:700; color:#5e5ce6;">${depts.length}</div>
+          <div style="font-size:0.75rem; color:var(--text-secondary);">Khoa bị ảnh hưởng</div>
+        </div>`;
+    }
+
+    // Update Top 5 rejections
+    const topEl = document.getElementById('topRejectionsChart');
+    if (topEl) {
+      const sortedTop = Object.entries(warningCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+      const maxCount = sortedTop[0] ? sortedTop[0][1] : 1;
+      const colors = ['#ff3b5c', '#ff9500', '#ffd60a', '#5e5ce6', '#30d158'];
+      let topHtml = '';
+      sortedTop.forEach(([name, count], i) => {
+        const pct = (count / results.reduce((s, r) => s + r.warnings.length, 0) * 100).toFixed(1);
+        const barW = (count / maxCount * 100).toFixed(0);
+        topHtml += `<div style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span style="color:var(--text-primary);font-size:0.85rem;font-weight:500;"><span style="color:${colors[i]}">●</span> ${name}</span>
+            <span style="color:${colors[i]};font-weight:700;font-size:0.85rem;">${count} cảnh báo (${pct}%)</span>
+          </div>
+          <div style="background:rgba(255,255,255,0.05);border-radius:6px;height:8px;overflow:hidden;">
+            <div style="background:${colors[i]};height:100%;width:${barW}%;border-radius:6px;transition:width 1s ease;"></div>
+          </div>
+        </div>`;
+      });
+      topEl.innerHTML = topHtml;
+    }
+
+    // Update Department breakdown
+    const deptEl = document.getElementById('deptBreakdown');
+    if (deptEl) {
+      const deptStats = {};
+      results.forEach(r => {
+        if (!r.dept) return;
+        if (!deptStats[r.dept]) deptStats[r.dept] = { patients: 0, records: 0, amount: 0 };
+        deptStats[r.dept].patients++;
+        deptStats[r.dept].records += r.rows.length;
+        deptStats[r.dept].amount += r.totalAmt;
+      });
+      const sortedDepts = Object.entries(deptStats).sort((a, b) => b[1].amount - a[1].amount);
+      const maxDeptAmt = sortedDepts[0] ? sortedDepts[0][1].amount : 1;
+      let deptHtml = '';
+      sortedDepts.forEach(([name, stats]) => {
+        const barW = (stats.amount / maxDeptAmt * 100).toFixed(0);
+        deptHtml += `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:10px;">
+          <div style="flex:1;">
+            <div style="color:var(--text-primary);font-size:0.85rem;font-weight:500;">${name}</div>
+            <div style="color:var(--text-tertiary);font-size:0.7rem;">${stats.patients} BN · ${stats.records} bản ghi</div>
+          </div>
+          <div style="width:120px;"><div style="background:rgba(255,255,255,0.05);border-radius:4px;height:6px;overflow:hidden;">
+            <div style="background:#5e5ce6;height:100%;width:${barW}%;border-radius:4px;"></div>
+          </div></div>
+          <div style="color:#5e5ce6;font-weight:600;font-size:0.8rem;min-width:90px;text-align:right;">${stats.amount.toLocaleString('vi-VN')}đ</div>
+        </div>`;
+      });
+      deptEl.innerHTML = deptHtml;
+    }
   }
 };
 
