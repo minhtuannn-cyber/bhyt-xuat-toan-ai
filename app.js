@@ -1527,8 +1527,21 @@ const App = {
     // Switch to Kết quả tab
     this.switchTab('results');
 
-    const container = document.getElementById('resultsContent');
-    if (!container) return;
+    // Hide default empty state and analysis results
+    const noResults = document.getElementById('noResults');
+    const analysisResults = document.getElementById('analysisResults');
+    if (noResults) noResults.style.display = 'none';
+    if (analysisResults) analysisResults.style.display = 'none';
+
+    // Get or create the import results container
+    const panel = document.getElementById('resultPanel');
+    if (!panel) return;
+    let container = document.getElementById('importedResultsView');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'importedResultsView';
+      panel.appendChild(container);
+    }
 
     // Group by patient
     const patientMap = {};
@@ -1553,8 +1566,15 @@ const App = {
   },
 
   renderImportedPage(page) {
-    const container = document.getElementById('resultsContent');
-    if (!container || !this.importedPatients) return;
+    let container = document.getElementById('importedResultsView');
+    if (!container || !this.importedPatients) {
+      // Fallback: create it
+      const panel = document.getElementById('resultPanel');
+      if (!panel) return;
+      container = document.createElement('div');
+      container.id = 'importedResultsView';
+      panel.appendChild(container);
+    }
 
     const pageSize = 20;
     const totalPages = Math.ceil(this.importedPatients.length / pageSize);
@@ -1621,8 +1641,14 @@ const App = {
 
   analyzeAllImported() {
     if (!this.importedRecords || !this.engine) return;
-    const container = document.getElementById('resultsContent');
-    if (!container) return;
+    let container = document.getElementById('importedResultsView');
+    if (!container) {
+      const panel = document.getElementById('resultPanel');
+      if (!panel) return;
+      container = document.createElement('div');
+      container.id = 'importedResultsView';
+      panel.appendChild(container);
+    }
 
     container.innerHTML = `<div style="text-align:center; padding:40px;">
       <div class="spinner" style="margin:0 auto 16px;"></div>
