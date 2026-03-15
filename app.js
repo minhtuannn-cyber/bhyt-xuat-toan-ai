@@ -1748,6 +1748,16 @@ const App = {
 
       container.innerHTML = html;
 
+      // Store results for report generation
+      this.lastAnalysisResults = results;
+      this.lastAnalysisTotalAmt = totalAmt;
+
+      // Add report button
+      const reportBtn = document.createElement('div');
+      reportBtn.style.cssText = 'text-align:center; padding:20px 0;';
+      reportBtn.innerHTML = `<button onclick="App.showReport()" style="background:linear-gradient(135deg,#5e5ce6,#0a84ff); color:#fff; border:none; padding:14px 32px; border-radius:12px; font-size:1rem; font-weight:600; cursor:pointer; box-shadow:0 4px 15px rgba(94,92,230,0.4); transition:all 0.3s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">📊 Xuất Báo cáo Phân tích</button>`;
+      container.appendChild(reportBtn);
+
       // Sync results to dashboard
       this.updateDashboardFromImport(results, totalAmt);
     }, 100);
@@ -1906,6 +1916,296 @@ const App = {
       });
       deptEl.innerHTML = deptHtml;
     }
+  },
+
+  // ========== AUTO REPORT GENERATION ==========
+  showReport() {
+    if (!this.lastAnalysisResults) {
+      alert('Chưa có dữ liệu phân tích. Vui lòng upload Excel và bấm "AI Phân tích tất cả" trước.');
+      return;
+    }
+    const report = this.generateReport(this.lastAnalysisResults, this.lastAnalysisTotalAmt);
+    const w = window.open('', '_blank');
+    w.document.write(report);
+    w.document.close();
+  },
+
+  generateReport(results, totalAmt) {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric' });
+    const timeStr = now.toLocaleTimeString('vi-VN', { hour:'2-digit', minute:'2-digit' });
+    const fileName = this.importedFileName || 'Dữ liệu Excel';
+    const totalRecords = this.importedRecords ? this.importedRecords.length : 0;
+
+    // Compute stats
+    const criticalPatients = results.filter(r => r.warnings.some(w => w.severity === 'critical'));
+    const warningPatients = results.filter(r => r.warnings.length > 0 && !r.warnings.some(w => w.severity === 'critical'));
+    const safePatients = results.filter(r => r.warnings.length === 0);
+
+    // Group warnings by category
+    const warningCats = {};
+    const allWarnings = [];
+    results.forEach(r => {
+      r.warnings.forEach(w => {
+        allWarnings.push({ ...w, patient: r.name, ma: r.ma, dept: r.dept });
+        let cat = 'Khác';
+        const msg = w.message.toLowerCase();
+        if (msg.includes('dvkt') || msg.includes('dịch vụ') || msg.includes('cls') || msg.includes('siêu âm') || msg.includes('x-quang') || msg.includes('nội soi') || msg.includes('oxy')) cat = 'DVKT';
+        else if (msg.includes('thuốc') || msg.includes('drug') || msg.includes('chống chỉ định') || msg.includes('tt37') || msg.includes('hdsd')) cat = 'Thuốc';
+        else if (msg.includes('thẻ') || msg.includes('bhyt') || msg.includes('hết hạn')) cat = 'Thẻ BHYT';
+        else if (msg.includes('icd') || msg.includes('chẩn đoán') || msg.includes('hồ sơ')) cat = 'Hồ sơ';
+        warningCats[cat] = (warningCats[cat] || 0) + 1;
+      });
+    });
+
+    // Dept stats
+    const deptStats = {};
+    results.forEach(r => {
+      if (!r.dept) return;
+      if (!deptStats[r.dept]) deptStats[r.dept] = { patients: 0, records: 0, amount: 0, critical: 0, warning: 0 };
+      deptStats[r.dept].patients++;
+      deptStats[r.dept].records += r.rows ? r.rows.length : 1;
+      deptStats[r.dept].amount += r.totalAmt;
+      if (r.warnings.some(w => w.severity === 'critical')) deptStats[r.dept].critical++;
+      else if (r.warnings.length > 0) deptStats[r.dept].warning++;
+    });
+    const sortedDepts = Object.entries(deptStats).sort((a,b) => b[1].amount - a[1].amount);
+
+    // Sorted warnings by frequency
+    const warnCount = {};
+    allWarnings.forEach(w => {
+      const key = w.message.substring(0, 60);
+      if (!warnCount[key]) warnCount[key] = { msg: w.message, severity: w.severity, count: 0, suggestion: w.suggestion || '' };
+      warnCount[key].count++;
+    });
+    const topWarnings = Object.values(warnCount).sort((a,b) => b.count - a.count).slice(0, 15);
+
+    // Critical cases
+    const criticalCases = allWarnings.filter(w => w.severity === 'critical');
+    const criticalByType = {};
+    criticalCases.forEach(w => {
+      const key = w.message.substring(0, 50);
+      if (!criticalByType[key]) criticalByType[key] = { msg: w.message, count: 0, patients: [], suggestion: w.suggestion || '' };
+      criticalByType[key].count++;
+      if (criticalByType[key].patients.length < 5) criticalByType[key].patients.push(w.patient);
+    });
+    const sortedCritical = Object.values(criticalByType).sort((a,b) => b.count - a.count);
+
+    // Legal basis
+    const legalRefs = [
+      { name: 'Luật BHYT 2024 sửa đổi', desc: '12 trường hợp không thanh toán BHYT (Điều 23)' },
+      { name: 'Thông tư 50/2017/TT-BYT', desc: 'Danh mục DVKT; Điều kiện chỉ định CLS/XN' },
+      { name: 'Thông tư 37/TT-BYT', desc: 'Hướng dẫn kê đơn thuốc BHYT' },
+      { name: 'Thông tư 30/2018/TT-BYT', desc: 'Danh mục thuốc BHYT' },
+      { name: 'Thông tư 22/2019/TT-BYT', desc: 'Kê đơn điện tử, hồ sơ bệnh án điện tử' },
+      { name: 'VB 17/VBHN-BYT', desc: 'Phân loại ngày giường ngoại khoa sau PT' },
+      { name: 'Nghị định 75/2017/NĐ-CP', desc: 'Chức năng, nhiệm vụ NVYT' }
+    ];
+
+    return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Báo cáo Phân tích Xuất Toán BHYT — BV ĐKKV Phú Thọ</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',sans-serif; background:#f8fafc; color:#1e293b; line-height:1.6; }
+  .report { max-width:900px; margin:0 auto; padding:40px 32px; }
+  @media print {
+    body { background:#fff; font-size:11pt; }
+    .report { padding:20px 0; max-width:100%; }
+    .no-print { display:none !important; }
+    .page-break { page-break-before:always; }
+    table { font-size:9pt; }
+    h1 { font-size:18pt; }
+    h2 { font-size:14pt; }
+    h3 { font-size:12pt; }
+  }
+  .header { text-align:center; margin-bottom:32px; border-bottom:3px solid #1e40af; padding-bottom:24px; }
+  .header h1 { font-size:1.8rem; color:#1e40af; margin-bottom:4px; }
+  .header .subtitle { color:#64748b; font-size:0.9rem; }
+  .header .badge { display:inline-block; background:#dc2626; color:#fff; padding:6px 16px; border-radius:20px; font-weight:700; font-size:1rem; margin-top:12px; }
+  .toolbar { display:flex; gap:12px; justify-content:center; margin-bottom:32px; }
+  .toolbar button { padding:10px 24px; border:none; border-radius:8px; font-size:0.9rem; font-weight:600; cursor:pointer; transition:all 0.2s; }
+  .btn-print { background:#1e40af; color:#fff; }
+  .btn-print:hover { background:#1e3a8a; }
+  .btn-close { background:#e2e8f0; color:#475569; }
+  .btn-close:hover { background:#cbd5e1; }
+  .section { margin-bottom:28px; }
+  .section h2 { font-size:1.2rem; color:#1e40af; border-bottom:2px solid #e2e8f0; padding-bottom:8px; margin-bottom:16px; }
+  .section h3 { font-size:1rem; color:#334155; margin:16px 0 8px; }
+  .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+  .kpi { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; text-align:center; }
+  .kpi .value { font-size:1.8rem; font-weight:700; }
+  .kpi .label { font-size:0.75rem; color:#64748b; margin-top:4px; }
+  .kpi.critical .value { color:#dc2626; }
+  .kpi.warning .value { color:#f59e0b; }
+  .kpi.safe .value { color:#16a34a; }
+  .kpi.total .value { color:#1e40af; }
+  table { width:100%; border-collapse:collapse; margin-bottom:16px; font-size:0.85rem; }
+  th,td { padding:8px 10px; text-align:left; border-bottom:1px solid #e2e8f0; }
+  th { background:#f1f5f9; font-weight:600; color:#475569; font-size:0.8rem; }
+  tr:hover { background:#f8fafc; }
+  .severity-critical { color:#dc2626; font-weight:600; }
+  .severity-warning { color:#f59e0b; font-weight:600; }
+  .severity-info { color:#0ea5e9; font-weight:600; }
+  .alert { padding:12px 16px; border-radius:8px; margin-bottom:12px; font-size:0.85rem; }
+  .alert-danger { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+  .alert-warning { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+  .alert-info { background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; }
+  .bar-chart { margin:8px 0; }
+  .bar-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .bar-label { width:180px; font-size:0.8rem; color:#475569; }
+  .bar-track { flex:1; height:18px; background:#e2e8f0; border-radius:4px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:4px; transition:width 0.5s; display:flex; align-items:center; padding-left:6px; color:#fff; font-size:0.7rem; font-weight:600; }
+  .bar-value { min-width:60px; text-align:right; font-size:0.8rem; font-weight:600; }
+  .rec-card { background:#fff; border-left:4px solid #1e40af; border-radius:0 8px 8px 0; padding:12px 16px; margin-bottom:10px; }
+  .rec-card h4 { color:#1e40af; font-size:0.9rem; margin-bottom:4px; }
+  .rec-card p { color:#475569; font-size:0.82rem; }
+  .footer { text-align:center; color:#94a3b8; font-size:0.75rem; margin-top:32px; padding-top:16px; border-top:1px solid #e2e8f0; }
+</style>
+</head>
+<body>
+<div class="report">
+  <div class="toolbar no-print">
+    <button class="btn-print" onclick="window.print()">🖨️ In / Xuất PDF</button>
+    <button class="btn-close" onclick="window.close()">✕ Đóng</button>
+  </div>
+
+  <div class="header">
+    <h1>📊 BÁO CÁO PHÂN TÍCH XUẤT TOÁN BHYT</h1>
+    <div class="subtitle">Bệnh viện Đa khoa Khu vực Phú Thọ — Mã BV: 25002</div>
+    <div class="subtitle">Nguồn: ${fileName} · ${totalRecords} bản ghi · ${results.length} bệnh nhân</div>
+    <div class="subtitle">Ngày lập: ${dateStr} lúc ${timeStr}</div>
+    <div class="badge">Tổng đề nghị KT: ${totalAmt.toLocaleString('vi-VN')} VNĐ</div>
+  </div>
+
+  <!-- I. TONG QUAN -->
+  <div class="section">
+    <h2>I. TỔNG QUAN KẾT QUẢ PHÂN TÍCH</h2>
+    <div class="kpi-grid">
+      <div class="kpi total"><div class="value">${results.length}</div><div class="label">Tổng BN kiểm tra</div></div>
+      <div class="kpi critical"><div class="value">${criticalPatients.length}</div><div class="label">🚨 Nghiêm trọng</div></div>
+      <div class="kpi warning"><div class="value">${warningPatients.length}</div><div class="label">⚠️ Cần xem xét</div></div>
+      <div class="kpi safe"><div class="value">${safePatients.length}</div><div class="label">✅ An toàn</div></div>
+    </div>
+
+    ${criticalPatients.length > 0 ? `<div class="alert alert-danger">⚠️ <strong>${criticalPatients.length} bệnh nhân</strong> có cảnh báo NGHIÊM TRỌNG cần xử lý ngay để tránh bị BHXH xuất toán.</div>` : ''}
+    ${safePatients.length > 0 ? `<div class="alert alert-info">✅ <strong>${safePatients.length} bệnh nhân</strong> (${(safePatients.length/results.length*100).toFixed(1)}%) hồ sơ an toàn, không phát hiện lỗi.</div>` : ''}
+  </div>
+
+  <!-- II. PHAN LOAI CANH BAO -->
+  <div class="section">
+    <h2>II. PHÂN LOẠI CẢNH BÁO</h2>
+    <div class="bar-chart">
+      ${Object.entries(warningCats).sort((a,b) => b[1]-a[1]).map(([cat, count]) => {
+        const maxCat = Math.max(...Object.values(warningCats));
+        const pct = (count/maxCat*100).toFixed(0);
+        const color = cat === 'DVKT' ? '#dc2626' : cat === 'Thuốc' ? '#f59e0b' : cat === 'Thẻ BHYT' ? '#8b5cf6' : '#0ea5e9';
+        return `<div class="bar-row">
+          <div class="bar-label">${cat}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}">${count}</div></div>
+          <div class="bar-value" style="color:${color}">${count} lỗi</div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>
+
+  <!-- III. LOI NGHIEM TRONG -->
+  ${sortedCritical.length > 0 ? `<div class="section">
+    <h2>III. LỖI NGHIÊM TRỌNG (Critical)</h2>
+    <table>
+      <tr><th>#</th><th>Nội dung cảnh báo</th><th>Số lần</th><th>BN ảnh hưởng</th><th>Gợi ý xử lý</th></tr>
+      ${sortedCritical.map((c, i) => `<tr>
+        <td>${i+1}</td>
+        <td class="severity-critical">${c.msg.substring(0, 80)}</td>
+        <td><strong>${c.count}</strong></td>
+        <td style="font-size:0.75rem;color:#64748b">${c.patients.join(', ')}${c.count > 5 ? '...' : ''}</td>
+        <td style="font-size:0.78rem">${c.suggestion || 'Kiểm tra và xử lý theo quy định'}</td>
+      </tr>`).join('')}
+    </table>
+  </div>` : ''}
+
+  <!-- IV. TOP CANH BAO -->
+  <div class="section page-break">
+    <h2>IV. TOP CẢNH BÁO PHỔ BIẾN</h2>
+    <table>
+      <tr><th>#</th><th>Mức độ</th><th>Nội dung</th><th>Số lần</th><th>Hướng xử lý</th></tr>
+      ${topWarnings.map((w, i) => `<tr>
+        <td>${i+1}</td>
+        <td class="severity-${w.severity}">${w.severity === 'critical' ? '🚨 Nghiêm trọng' : w.severity === 'warning' ? '⚠️ Cảnh báo' : 'ℹ️ Gợi ý'}</td>
+        <td style="font-size:0.82rem">${w.msg.substring(0, 80)}</td>
+        <td><strong>${w.count}</strong></td>
+        <td style="font-size:0.78rem">${w.suggestion || '—'}</td>
+      </tr>`).join('')}
+    </table>
+  </div>
+
+  <!-- V. PHAN BO KHOA -->
+  ${sortedDepts.length > 0 ? `<div class="section">
+    <h2>V. PHÂN BỔ THEO KHOA</h2>
+    <table>
+      <tr><th>Khoa</th><th>Số BN</th><th>Bản ghi</th><th>Tổng tiền</th><th>Nghiêm trọng</th><th>Cảnh báo</th></tr>
+      ${sortedDepts.map(([name, s]) => `<tr>
+        <td><strong>${name}</strong></td>
+        <td>${s.patients}</td>
+        <td>${s.records}</td>
+        <td style="color:#dc2626;font-weight:600">${s.amount.toLocaleString('vi-VN')}đ</td>
+        <td class="severity-critical">${s.critical}</td>
+        <td class="severity-warning">${s.warning}</td>
+      </tr>`).join('')}
+    </table>
+    <div class="bar-chart">
+      ${sortedDepts.slice(0,5).map(([name, s]) => {
+        const maxAmt = sortedDepts[0][1].amount || 1;
+        const pct = (s.amount/maxAmt*100).toFixed(0);
+        return `<div class="bar-row">
+          <div class="bar-label">${name.substring(0,25)}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:#1e40af">${s.amount.toLocaleString('vi-VN')}đ</div></div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>` : ''}
+
+  <!-- VI. CAN CU PHAP LY -->
+  <div class="section">
+    <h2>VI. CĂN CỨ PHÁP LÝ</h2>
+    <table>
+      <tr><th>Văn bản</th><th>Nội dung liên quan</th></tr>
+      ${legalRefs.map(r => `<tr><td><strong>${r.name}</strong></td><td>${r.desc}</td></tr>`).join('')}
+    </table>
+  </div>
+
+  <!-- VII. KHUYEN NGHI -->
+  <div class="section">
+    <h2>VII. KHUYẾN NGHỊ CẢI THIỆN</h2>
+    <div class="rec-card" style="border-color:#dc2626">
+      <h4>🔴 Ưu tiên 1: Xử lý lỗi nghiêm trọng (${criticalPatients.length} BN)</h4>
+      <p>Rà soát ngay các hồ sơ có cảnh báo critical. Kiểm tra chống chỉ định thuốc, trùng y lệnh khi PT, và các trường hợp không thuộc phạm vi thanh toán BHYT.</p>
+    </div>
+    <div class="rec-card" style="border-color:#f59e0b">
+      <h4>🟠 Ưu tiên 2: Cấu hình HIS tự động cảnh báo</h4>
+      <p>Thiết lập cảnh báo tự động trên phần mềm HIS: chặn y lệnh trùng PT, kiểm tra chống chỉ định thuốc-bệnh, ngăn DVKT trùng lặp (SA ổ bụng + SA tiết niệu, Oxy + Thở máy...).</p>
+    </div>
+    <div class="rec-card" style="border-color:#0ea5e9">
+      <h4>🔵 Ưu tiên 3: Đào tạo nhân viên</h4>
+      <p>Tập huấn BS và ĐD về các lỗi phổ biến: kê thuốc theo TT37, chỉ định CLS phù hợp TT50, phân loại ngày giường theo VB17.</p>
+    </div>
+    <div class="rec-card" style="border-color:#16a34a">
+      <h4>🟢 Ưu tiên 4: Quy trình kiểm tra trước gửi BHXH</h4>
+      <p>Sử dụng hệ thống AI Cảnh báo Xuất Toán để kiểm tra hồ sơ trước khi gửi lên cổng giám định BHXH, giảm thiểu rủi ro bị xuất toán.</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Báo cáo được tạo tự động bởi <strong>AI Cảnh báo Xuất Toán BHYT</strong> — BV Đa khoa Khu vực Phú Thọ</p>
+    <p>${dateStr} ${timeStr} · Phiên bản 1.0</p>
+  </div>
+</div>
+</body>
+</html>`;
   }
 };
 
